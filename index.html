@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PartiSynth</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="ui-controls">
+        <label for="scaleSelector">Scale:</label>
+        <select id="scaleSelector">
+            <option value="chromatic">Chromatic</option>
+            <option value="major">Major</option>
+            <option value="naturalMinor">Natural Minor</option>
+            <option value="majorPentatonic">Major Pentatonic</option>
+            <option value="minorPentatonic">Minor Pentatonic</option>
+        </select>
+
+        <button id="playPauseButton">Play</button>
+        <button id="muteUnmuteButton">Mute</button>
+        <button id="soloButton">Solo</button>
+
+        <div id="selectedParticleInfo">Selected: None</div>
+    </div>
+    <canvas id="particleCanvas"></canvas>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <script src="script.js"></script>
+</body>
+</html>

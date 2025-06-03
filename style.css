@@ -1,0 +1,49 @@
+body {
+    margin: 0;
+    overflow: hidden; /* Hide scrollbars if canvas is larger than viewport */
+    font-family: sans-serif;
+    background-color: #f0f0f0; /* Light grey background */
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+}
+
+#ui-controls {
+    background-color: #333; /* Dark background for controls */
+    color: white;
+    padding: 10px;
+    display: flex; /* Arrange controls horizontally */
+    align-items: center; /* Vertically align items in the center */
+    height: 50px; /* Fixed height for the control bar */
+    box-sizing: border-box;
+}
+
+#particleCanvas {
+    flex-grow: 1; /* Canvas takes remaining vertical space */
+    display: block; /* Remove extra space below canvas */
+    background-color: #000; /* Black background for the canvas */
+}
+
+/* Basic styling for UI elements that will be added later */
+#ui-controls label,
+#ui-controls select,
+#ui-controls button {
+    margin-right: 15px;
+}
+
+#ui-controls button {
+    padding: 5px 10px;
+    background-color: #555;
+    color: white;
+    border: 1px solid #777;
+    cursor: pointer;
+}
+
+#ui-controls button:hover {
+    background-color: #777;
+}
+
+#selectedParticleInfo {
+    margin-left: auto; /* Pushes this element to the far right */
+    font-size: 0.9em;
+}
