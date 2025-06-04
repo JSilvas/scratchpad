@@ -47,3 +47,8 @@ body {
     margin-left: auto; /* Pushes this element to the far right */
     font-size: 0.9em;
 }
+
+#ui-controls button.active {
+    background-color: #007bff; /* Example active color */
+    color: white;
+}

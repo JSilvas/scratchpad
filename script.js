@@ -44,6 +44,7 @@ document.addEventListener('DOMContentLoaded', () => {
             this.oscillator = new Tone.Oscillator({
                 type: 'sine',
                 frequency: this.currentFrequency,
+                volume: 0 // Default volume 0dB. Max is typically 0dB.
             }).connect(masterGain);
 
             this.noise = new Tone.Noise('pink');
@@ -55,6 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
             this.isSelected = false;
             this.wasBent = false;
             this.isCollidingWith = null; // Added from physics step
+            this.isSoloed = false;
+            this.currentNoiseGainValue = 0; // To store its actual noise gain before being muted by solo
         }
 
         quantizeFrequency(freq, scaleNotes) {
@@ -133,9 +136,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const PITCH_SCALING_FACTOR = 12; // Tuned for a more noticeable pitch range across radii
 
     // Audio Behavior Constants (examples, will be tuned)
-    const MAX_NOISE_GAIN = 0.05;
+    const MAX_NOISE_GAIN = 0.03; // Adjusted for more subtlety
     const NOISE_SPEED_FACTOR = 0.005;
-    const MIN_SPEED_FOR_NOISE = 0.1;
+    const MIN_SPEED_FOR_NOISE = 0.2; // Adjusted for more definite movement
     const MAX_PITCH_BEND_SEMITONES = 3;
     const PITCH_BEND_RAMP_TIME = 0.05; // 50ms
     const NOISE_GAIN_RAMP_TIME = 0.1; // 100ms for noise gain changes
@@ -215,6 +218,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    muteUnmuteButton.addEventListener('click', () => {
+        Tone.Destination.mute = !Tone.Destination.mute;
+        if (Tone.Destination.mute) {
+            muteUnmuteButton.textContent = 'Unmute';
+            console.log('Master output muted');
+        } else {
+            muteUnmuteButton.textContent = 'Mute';
+            console.log('Master output unmuted');
+        }
+    });
+
     scaleSelector.addEventListener('change', (event) => {
         const selectedScaleName = event.target.value;
         currentScale = getScaleNotes(selectedScaleName, ROOT_NOTE); // getScaleNotes returns the array of note names
@@ -225,7 +239,139 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    // Solo Button - Initial (will be enhanced with particle selection)
+    soloButton.disabled = true; // Disabled until a particle is selected
+    soloButton.addEventListener('click', () => {
+        if (!selectedParticle) {
+            console.log('Solo button clicked, but no particle selected.');
+            return;
+        }
+
+        // Toggle solo state for the selectedParticle
+        const currentlySolo = selectedParticle.isSoloed;
+
+        if (currentlySolo) {
+            // Unsolo: Restore all particle volumes
+            particles.forEach(p => {
+                p.oscillator.volume.rampTo(0, 0.1);
+                p.noiseGain.gain.rampTo(p.currentNoiseGainValue || 0, 0.1);
+                p.isSoloed = false;
+            });
+            soloButton.textContent = 'Solo';
+            soloButton.classList.remove('active');
+            console.log(`Particle ${selectedParticle.id} unsoloed.`);
+        } else {
+            // Solo: Mute others, ensure selected is normal volume
+            particles.forEach(p => {
+                if (p === selectedParticle) {
+                    p.oscillator.volume.rampTo(0, 0.1); // Normal volume (0dB)
+                    p.noiseGain.gain.rampTo(p.currentNoiseGainValue || 0, 0.1); // Its current actual noise gain
+                    p.isSoloed = true;
+                } else {
+                    p.oscillator.volume.rampTo(-Infinity, 0.1); // Mute
+                    p.noiseGain.gain.rampTo(0, 0.1); // Mute noise
+                    p.isSoloed = false;
+                }
+            });
+            soloButton.textContent = 'Unsolo';
+            soloButton.classList.add('active');
+            console.log(`Particle ${selectedParticle.id} soloed.`);
+        }
+    });
+
+    function updateSelectedParticleInfo() {
+        if (selectedParticle) {
+            // Format frequency to 2 decimal places
+            const freqDisplay = selectedParticle.currentFrequency.toFixed(2);
+            // Format noise gain as percentage or dB. Let's use raw value for now.
+            // Reading .value from a non-GainNode or non-Param object will fail.
+            // Need to ensure selectedParticle.noiseGain.gain exists.
+            const noiseGainObject = selectedParticle.noiseGain || {}; // Handle if noiseGain itself is null/undefined
+            const noiseGainParam = noiseGainObject.gain || {}; // Handle if gain is null/undefined
+            const noiseDisplay = (noiseGainParam.value !== undefined ? noiseGainParam.value : 0).toFixed(3);
+
+            selectedParticleInfoDisplay.textContent =
+                `Selected: Particle #${selectedParticle.id} | Freq: ${freqDisplay} Hz | Noise: ${noiseDisplay}`;
+            soloButton.disabled = false;
+        } else {
+            selectedParticleInfoDisplay.textContent = 'Selected: None';
+            soloButton.disabled = true;
+            // If solo was active, deactivate it
+            const soloActiveParticle = particles.find(p => p.isSoloed);
+            if (soloActiveParticle) {
+                // Reset all volumes to normal if unselecting a soloed particle
+                particles.forEach(p => {
+                    p.oscillator.volume.rampTo(0, 0.1);
+                    p.noiseGain.gain.rampTo(p.currentNoiseGainValue || 0, 0.1);
+                    p.isSoloed = false;
+                });
+                if (soloButton.classList.contains('active')) {
+                    soloButton.textContent = 'Solo';
+                    soloButton.classList.remove('active');
+                }
+            }
+        }
+    }
+
     // --- Core Functions (stubs for now, to be implemented in later steps) ---
+
+    canvas.addEventListener('click', (event) => {
+        // Resume Tone.js context if it's suspended, as click is a user gesture
+        if (Tone.context.state !== 'running') {
+            Tone.start().then(() => {
+                console.log('AudioContext resumed by canvas click.');
+                // If particles hadn't started their audio yet (e.g. if initial body click was missed)
+                if (particles.length > 0 && particles[0].oscillator.state !== 'started') {
+                    particles.forEach(p => p.startAudio());
+                }
+            });
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const clickX = event.clientX - rect.left;
+        const clickY = event.clientY - rect.top;
+
+        let clickedParticle = null;
+        // Iterate in reverse to select "topmost" particle if overlapping
+        for (let i = particles.length - 1; i >= 0; i--) {
+            const particle = particles[i];
+            const dx = clickX - particle.x;
+            const dy = clickY - particle.y;
+            const distanceSquared = dx * dx + dy * dy;
+
+            if (distanceSquared < particle.radius * particle.radius) {
+                clickedParticle = particle;
+                break; // Select the first one found (topmost if drawn in order)
+            }
+        }
+
+        if (selectedParticle && selectedParticle !== clickedParticle) {
+            selectedParticle.isSelected = false; // Deselect previous
+        }
+
+        if (clickedParticle) {
+            selectedParticle = clickedParticle;
+            selectedParticle.isSelected = true;
+
+            // Apply impulse
+            const angle = Math.random() * Math.PI * 2;
+            const forceMagnitude = BUMP_FORCE; // BUMP_FORCE is already defined
+            selectedParticle.vx += Math.cos(angle) * forceMagnitude;
+            selectedParticle.vy += Math.sin(angle) * forceMagnitude;
+            selectedParticle.isMoving = true; // Set isMoving flag
+
+            console.log(`Particle ${selectedParticle.id} clicked and selected. Impulse applied.`);
+        } else {
+            // Clicked on empty space
+            if (selectedParticle) {
+                selectedParticle.isSelected = false;
+            }
+            selectedParticle = null;
+            console.log('Canvas clicked (empty space), selection cleared.');
+        }
+
+        updateSelectedParticleInfo(); // Update UI display and Solo button state
+    });
 
     function initializeParticles(num) {
         particles.forEach(p => p.stopAudio()); // Stop any existing particles' audio
@@ -348,11 +494,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (speed > MIN_SPEED_FOR_NOISE) {
                 noiseGainValue = Math.min(MAX_NOISE_GAIN, speed * NOISE_SPEED_FACTOR);
             }
+            particle.currentNoiseGainValue = noiseGainValue; // Store this value
+
             // Ensure noiseGain and its gain property exist before trying to ramp
             if (particle.noiseGain && particle.noiseGain.gain) {
-                 // Check if the current gain is different enough to warrant a ramp
-                if (Math.abs(particle.noiseGain.gain.value - noiseGainValue) > 0.001) {
-                    particle.noiseGain.gain.rampTo(noiseGainValue, NOISE_GAIN_RAMP_TIME);
+                // Only ramp if not soloed by another particle, or if this is the soloed one
+                const isActuallySoloedByOther = particles.some(p => p.isSoloed && p !== particle);
+                if (!isActuallySoloedByOther || particle.isSoloed) {
+                    if (Math.abs(particle.noiseGain.gain.value - noiseGainValue) > 0.001) {
+                        particle.noiseGain.gain.rampTo(noiseGainValue, NOISE_GAIN_RAMP_TIME);
+                    }
                 }
             }
 
@@ -418,4 +569,6 @@ document.addEventListener('DOMContentLoaded', () => {
     animationLoop(); // Start the animation loop
 
     console.log('PartiSynth initialized');
-});
+    updateSelectedParticleInfo(); // Initialize the display
+    console.log('PartiSynth UI initial setup complete.');
+}); // End of DOMContentLoaded
